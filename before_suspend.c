@@ -2,14 +2,14 @@
 #include <stdlib.h>
 #include <time.h>
 
-int main() {
+int main(int argc, char **argv) {
 
 	FILE *log_file_f, *energy_now_f;
 	unsigned int energy_before;
 	time_t unix_time_before;
 
 	log_file_f = fopen("/var/log/battery", "a");
-	energy_now_f = fopen("/sys/class/power_supply/BAT0/energy_now", "r");
+	energy_now_f = fopen("/sys/class/power_supply/BAT0/charge_now", "r");
 
 	unix_time_before = time(NULL);
 	fscanf(energy_now_f, "%u", &energy_before);
