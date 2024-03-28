@@ -17,6 +17,18 @@
 #define POWER_DRAW			1
 
 
+int file_exists(const char *path) {
+	FILE *f = fopen(path, "r");
+	
+	if (f == NULL) {
+		return 0;
+	}
+	
+	fclose(f);	
+	return 1;
+}
+
+
 // gets short name program was called with
 const char *get_name(const char *path) {
 	int slash_pos;
@@ -57,19 +69,20 @@ void append_field(char *dest, const char *src) {
 
 
 void before_suspend() {
-	FILE *log_file_f, *energy_now_f;
-	unsigned int energy_before;
+	FILE *log_file_f;
+	unsigned int charge_before;
 	time_t unix_time_before;
 
 	log_file_f = fopen(LOG_FILE, "a");
-	energy_now_f = fopen("/sys/class/power_supply/BAT0/charge_now", "r");
-
 	unix_time_before = time(NULL);
-	fscanf(energy_now_f, "%u", &energy_before);
+	
+	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
+		charge_before = get_value("/sys/class/power_supply/BAT0/charge_now");
+	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
+		charge_before = get_value("/sys/class/power_supply/BAT0/energy_now");
+	}
 
-	fprintf(log_file_f, "%lu %u", unix_time_before, energy_before);
-
-	fclose(energy_now_f);
+	fprintf(log_file_f, "%lu %u", unix_time_before, charge_before);
 	fclose(log_file_f);
 }
 
@@ -101,9 +114,15 @@ void after_suspend() {
 	// Get all values needed, first from sysfs and then from log file
 	unsigned int last_nl_pos /*last newline position*/, found_newline;
 
-	charge_after = get_value("/sys/class/power_supply/BAT0/charge_now");
-	charge_full = get_value("/sys/class/power_supply/BAT0/charge_full");
-	charge_full_design = get_value("/sys/class/power_supply/BAT0/charge_full_design");
+	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
+		charge_after = get_value("/sys/class/power_supply/BAT0/charge_now");
+		charge_full = get_value("/sys/class/power_supply/BAT0/charge_full");
+		charge_full_design = get_value("/sys/class/power_supply/BAT0/charge_full_design");
+	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
+		charge_after = get_value("/sys/class/power_supply/BAT0/energy_now");
+		charge_full = get_value("/sys/class/power_supply/BAT0/energy_full");
+		charge_full_design = get_value("/sys/class/power_supply/BAT0/energy_full_design");
+	}
 
 	last_nl_pos = buf_len - 1;
 	found_newline = 0;
