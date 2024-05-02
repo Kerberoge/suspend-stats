@@ -5,7 +5,8 @@
 #include <sys/stat.h>
 
 #define LOG_FILE "/var/log/battery"
-#define CAPACITY_JOULE 56 * 3600 // 56 Wh
+#define TEMP_FILE "/tmp/pre_suspend_data"
+#define CAPACITY_JOULE 37 * 3600 // 37 Wh
 
 // options: 1 means enabled, 0 disabled
 #define TIME_BEFORE			1
@@ -19,12 +20,12 @@
 
 int file_exists(const char *path) {
 	FILE *f = fopen(path, "r");
-	
-	if (f == NULL) {
+
+	if (!f) {
 		return 0;
 	}
-	
-	fclose(f);	
+
+	fclose(f);
 	return 1;
 }
 
@@ -68,22 +69,36 @@ void append_field(char *dest, const char *src) {
 }
 
 
-void before_suspend() {
-	FILE *log_file_f;
-	unsigned int charge_before;
-	time_t unix_time_before;
+void store_temp_data(long unsigned int time, unsigned int charge) {
+	FILE *temp_file;
+	temp_file = fopen(TEMP_FILE, "a");
+	fprintf(temp_file, "%lu %u", time, charge);
+	fclose(temp_file);
+}
 
-	log_file_f = fopen(LOG_FILE, "a");
+
+void retrieve_temp_data(long unsigned int *time, unsigned int *charge) {
+	FILE *temp_file;
+	temp_file = fopen(TEMP_FILE, "r");
+	fscanf(temp_file, "%lu %u", time, charge);
+	fclose(temp_file);
+	remove(TEMP_FILE);
+}
+
+
+void before_suspend() {
+	time_t unix_time_before;
+	unsigned int charge_before;
+
 	unix_time_before = time(NULL);
-	
+
 	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
 		charge_before = get_value("/sys/class/power_supply/BAT0/charge_now");
 	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
 		charge_before = get_value("/sys/class/power_supply/BAT0/energy_now");
 	}
 
-	fprintf(log_file_f, "%lu %u", unix_time_before, charge_before);
-	fclose(log_file_f);
+	store_temp_data(unix_time_before, charge_before);
 }
 
 
@@ -100,20 +115,18 @@ void after_suspend() {
 
 	// Copy contents of log file into a buffer
 	log_file_f = fopen(LOG_FILE, "r");
-	
+
 	fseek(log_file_f, 0, SEEK_END);
 	buf_len = ftell(log_file_f);
 	buffer = malloc(sizeof(char) * (buf_len + 200));
-	
+
 	fseek(log_file_f, 0, SEEK_SET);
 	fread(buffer, 1, buf_len, log_file_f);
 
 	fclose(log_file_f);
 
 
-	// Get all values needed, first from sysfs and then from log file
-	unsigned int last_nl_pos /*last newline position*/, found_newline;
-
+	// Get all values needed, first from sysfs and then from temporary file
 	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
 		charge_after = get_value("/sys/class/power_supply/BAT0/charge_now");
 		charge_full = get_value("/sys/class/power_supply/BAT0/charge_full");
@@ -124,24 +137,8 @@ void after_suspend() {
 		charge_full_design = get_value("/sys/class/power_supply/BAT0/energy_full_design");
 	}
 
-	last_nl_pos = buf_len - 1;
-	found_newline = 0;
-	while (last_nl_pos > 0) {
-		if (buffer[last_nl_pos] == '\n') {
-			found_newline = 1;
-			break;
-		} else {
-			last_nl_pos--;
-		}
-	}
+	retrieve_temp_data(&unix_time_before, &charge_before);
 
-	sscanf(&buffer[last_nl_pos + found_newline], "%lu %u",
-		&unix_time_before, &charge_before);
-
-	for (int i = last_nl_pos + found_newline; i < buf_len; i++) {
-		buffer[i] = 0;
-	}
-	
 
 	// Calculate time difference
 	unix_time_after = time(NULL);
@@ -180,7 +177,7 @@ void after_suspend() {
 			time_after.tm_hour, time_after.tm_min, time_after.tm_sec);
 	append_field(buffer, time_after_str);
 #endif
-	
+
 #if TIME_DIFF
 	char time_diff_str[20];
 	sprintf(time_diff_str, "%02d:%02d:%02d", time_diff_h, time_diff_m, time_diff_s);
@@ -210,7 +207,7 @@ void after_suspend() {
 	sprintf(power_draw_str, "%.3f W", power_draw);
 	append_field(buffer, power_draw_str);
 #endif
-	
+
 	strcat(buffer, "\n");
 
 
