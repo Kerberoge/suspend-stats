@@ -55,14 +55,13 @@ unsigned int get_value(const char *path) {
 
 // strcat but with spaces between fields
 void append_field(char *dest, const char *src) {
-	const char last_char = *(dest + strlen(dest) - 1);
 	const char *delimiter = "        ";
 
-	if (last_char == '\n') {
+	if (strlen(dest) == 0) {
 		// first field
-		strcpy(dest + strlen(dest), src);
+		strcpy(dest, src);
 	} else {
-		// not first field
+		// not first field, append a delimiter first
 		strcpy(dest + strlen(dest), delimiter);
 		strcpy(dest + strlen(dest), src);
 	}
@@ -86,6 +85,14 @@ void retrieve_temp_data(long unsigned int *time, unsigned int *charge) {
 }
 
 
+void write_buffer(char *buffer) {
+	//remove(LOG_FILE);
+	FILE *log_file_f = fopen(LOG_FILE, "a");
+	fprintf(log_file_f, "%s", buffer);
+	fclose(log_file_f);
+}
+
+
 void before_suspend() {
 	time_t unix_time_before;
 	unsigned int charge_before;
@@ -103,9 +110,7 @@ void before_suspend() {
 
 
 void after_suspend() {
-	FILE *log_file_f;
 	char *buffer;
-	unsigned int buf_len;
 	unsigned int charge_before, charge_after, charge_full, charge_full_design;
 	time_t unix_time_before, unix_time_after, unix_time_diff;
 	unsigned int time_diff_h, time_diff_m, time_diff_s;
@@ -113,17 +118,9 @@ void after_suspend() {
 	float energy_consumed, power_draw;
 
 
-	// Copy contents of log file into a buffer
-	log_file_f = fopen(LOG_FILE, "r");
-
-	fseek(log_file_f, 0, SEEK_END);
-	buf_len = ftell(log_file_f);
-	buffer = malloc(sizeof(char) * (buf_len + 200));
-
-	fseek(log_file_f, 0, SEEK_SET);
-	fread(buffer, 1, buf_len, log_file_f);
-
-	fclose(log_file_f);
+	// Create buffer
+	buffer = malloc(200);
+	memset(buffer, 0, 200);
 
 
 	// Get all values needed, first from sysfs and then from temporary file
@@ -212,10 +209,7 @@ void after_suspend() {
 
 
 	// Write contents of buffer to log file
-	remove(LOG_FILE);
-	log_file_f = fopen(LOG_FILE, "w");
-	fprintf(log_file_f, "%s", buffer);
-	fclose(log_file_f);
+	write_buffer(buffer);
 
 
 	// Set appropriate mode for log file
@@ -224,11 +218,10 @@ void after_suspend() {
 
 
 int main(int argc, char **argv) {
-	if (strcmp(get_name(argv[0]), "measure_start") == 0) {
+	if (strcmp(get_name(argv[0]), "measure_start") == 0)
 		before_suspend();
-	} else if (strcmp(get_name(argv[0]), "measure_end") == 0) {
+	else if (strcmp(get_name(argv[0]), "measure_end") == 0)
 		after_suspend();
-	}
 
 	return 0;
 }
