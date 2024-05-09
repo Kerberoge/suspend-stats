@@ -21,9 +21,8 @@
 int file_exists(const char *path) {
 	FILE *f = fopen(path, "r");
 
-	if (!f) {
+	if (!f)
 		return 0;
-	}
 
 	fclose(f);
 	return 1;
@@ -86,30 +85,28 @@ void retrieve_temp_data(long unsigned int *time, unsigned int *charge) {
 
 
 void write_buffer(char *buffer) {
-	//remove(LOG_FILE);
 	FILE *log_file_f = fopen(LOG_FILE, "a");
 	fprintf(log_file_f, "%s", buffer);
 	fclose(log_file_f);
 }
 
 
-void before_suspend() {
+void before_suspend(void) {
 	time_t unix_time_before;
 	unsigned int charge_before;
 
 	unix_time_before = time(NULL);
 
-	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
+	if (file_exists("/sys/class/power_supply/BAT0/charge_now"))
 		charge_before = get_value("/sys/class/power_supply/BAT0/charge_now");
-	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
+	else if (file_exists("/sys/class/power_supply/BAT0/energy_now"))
 		charge_before = get_value("/sys/class/power_supply/BAT0/energy_now");
-	}
 
 	store_temp_data(unix_time_before, charge_before);
 }
 
 
-void after_suspend() {
+void after_suspend(void) {
 	char *buffer;
 	unsigned int charge_before, charge_after, charge_full, charge_full_design;
 	time_t unix_time_before, unix_time_after, unix_time_diff;
