@@ -167,30 +167,30 @@ void after_suspend(void) {
 #endif
 
 #if PERC_DIFF || PERC_PER_HOUR
-	float perc_diff = (float) (int) (charge_before - charge_after) / charge_full * 100;
+	float perc_diff = (float) (int) (charge_after - charge_before) / charge_full * 100;
 #endif
 
 #if PERC_DIFF
 	char perc_diff_str[20];
-	sprintf(perc_diff_str, "%5.1f%%", perc_diff);
+	sprintf(perc_diff_str, "%+5.1f%%", perc_diff);
 	append_field(buffer, perc_diff_str);
 #endif
 
 #if PERC_PER_HOUR
 	float perc_per_hour = perc_diff / ((float) unix_time_diff / 3600);
 	char perc_per_hour_str[20];
-	sprintf(perc_per_hour_str, "%7.3f%%/h", perc_per_hour);
+	sprintf(perc_per_hour_str, "%+7.3f%%/h", perc_per_hour);
 	append_field(buffer, perc_per_hour_str);
 #endif
 
 #if ENERGY_CONSUMED || POWER_DRAW
 	// Energy in joule
-	float energy_consumed = (float) (int) (charge_before - charge_after) / charge_full_design * CAPACITY_JOULE;
+	float energy_consumed = (float) (int) (charge_after - charge_before) / charge_full_design * CAPACITY_JOULE;
 #endif
 
 #if ENERGY_CONSUMED
 	char energy_consumed_str[20];
-	sprintf(energy_consumed_str, "%5.0fJ", energy_consumed);
+	sprintf(energy_consumed_str, "%+5.0fJ", energy_consumed);
 	append_field(buffer, energy_consumed_str);
 #endif
 
@@ -198,7 +198,7 @@ void after_suspend(void) {
 	// Power draw in watts
 	float power_draw = (float) energy_consumed / unix_time_diff;
 	char power_draw_str[20];
-	sprintf(power_draw_str, "%7.3fW", power_draw);
+	sprintf(power_draw_str, "%+7.3fW", power_draw);
 	append_field(buffer, power_draw_str);
 #endif
 
