@@ -16,6 +16,7 @@
 #define PERC_PER_HOUR		0
 #define ENERGY_CONSUMED		0
 #define POWER_DRAW			1
+#define S0_RES_PERC			1
 
 
 int file_exists(const char *path) {
@@ -33,7 +34,8 @@ int file_exists(const char *path) {
 const char *get_name(const char *path) {
 	int slash_pos;
 
-	for (slash_pos = strlen(path) - 1; slash_pos >= 0 && path[slash_pos] != '/'; slash_pos--);
+	for (slash_pos = strlen(path) - 1; slash_pos >= 0 && path[slash_pos] != '/';
+			slash_pos--);
 
 	return path + slash_pos + 1;
 }
@@ -54,7 +56,7 @@ unsigned int get_value(const char *path) {
 
 // strcat but with spaces between fields
 void append_field(char *dest, const char *src) {
-	const char *delimiter = "        ";
+	const char *delimiter = "    ";
 
 	if (strlen(dest) == 0) {
 		// first field
@@ -67,18 +69,20 @@ void append_field(char *dest, const char *src) {
 }
 
 
-void store_temp_data(long unsigned int time, unsigned int charge) {
+void store_temp_data(long unsigned int time, unsigned int charge,
+			long unsigned int s0_res) {
 	FILE *temp_file;
 	temp_file = fopen(TEMP_FILE, "a");
-	fprintf(temp_file, "%lu %u", time, charge);
+	fprintf(temp_file, "%lu %u %lu", time, charge, s0_res);
 	fclose(temp_file);
 }
 
 
-void retrieve_temp_data(long unsigned int *time, unsigned int *charge) {
+void retrieve_temp_data(long unsigned int *time, unsigned int *charge,
+			long unsigned int *s0_res) {
 	FILE *temp_file;
 	temp_file = fopen(TEMP_FILE, "r");
-	fscanf(temp_file, "%lu %u", time, charge);
+	fscanf(temp_file, "%lu %u %lu", time, charge, s0_res);
 	fclose(temp_file);
 	remove(TEMP_FILE);
 }
@@ -94,6 +98,7 @@ void write_buffer(char *buffer) {
 void before_suspend(void) {
 	time_t unix_time_before;
 	unsigned int charge_before;
+	long unsigned int s0_res_before;
 
 	unix_time_before = time(NULL);
 
@@ -101,14 +106,18 @@ void before_suspend(void) {
 		charge_before = get_value("/sys/class/power_supply/BAT0/charge_now");
 	else if (file_exists("/sys/class/power_supply/BAT0/energy_now"))
 		charge_before = get_value("/sys/class/power_supply/BAT0/energy_now");
+	// Get S0 residency (how much time is spent in any S0ix sleep state)
+	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
+		s0_res_before = get_value("/sys/kernel/debug/pmc_core/slp_s0_residency_usec");
 
-	store_temp_data(unix_time_before, charge_before);
+	store_temp_data(unix_time_before, charge_before, s0_res_before);
 }
 
 
 void after_suspend(void) {
 	char *buffer;
 	unsigned int charge_before, charge_after, charge_full, charge_full_design;
+	long unsigned int s0_res_before, s0_res_after;
 	time_t unix_time_before, unix_time_after, unix_time_diff;
 	unsigned int time_diff_h, time_diff_m, time_diff_s;
 
@@ -129,7 +138,10 @@ void after_suspend(void) {
 		charge_full_design = get_value("/sys/class/power_supply/BAT0/energy_full_design");
 	}
 
-	retrieve_temp_data(&unix_time_before, &charge_before);
+	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
+		s0_res_after = get_value("/sys/kernel/debug/pmc_core/slp_s0_residency_usec");
+
+	retrieve_temp_data(&unix_time_before, &charge_before, &s0_res_before);
 
 
 	// Calculate time difference
@@ -185,7 +197,8 @@ void after_suspend(void) {
 
 #if ENERGY_CONSUMED || POWER_DRAW
 	// Energy in joule
-	float energy_consumed = (float) (int) (charge_after - charge_before) / charge_full_design * CAPACITY_JOULE;
+	float energy_consumed = (float) (int) (charge_after - charge_before)
+		/ charge_full_design * CAPACITY_JOULE;
 #endif
 
 #if ENERGY_CONSUMED
@@ -201,6 +214,15 @@ void after_suspend(void) {
 	sprintf(power_draw_str, "%+7.3fW", power_draw);
 	append_field(buffer, power_draw_str);
 #endif
+
+#if S0_RES_PERC
+	// S0 residency, as a percentage of total sleep time
+	float s0_res_perc = (float) (s0_res_after - s0_res_before) / 1e4 / unix_time_diff;
+	char s0_res_perc_str[20];
+	sprintf(s0_res_perc_str, "%5.1f%%", s0_res_perc);
+	append_field(buffer, s0_res_perc_str);
+#endif
+
 
 	strcat(buffer, "\n");
 
