@@ -30,16 +30,6 @@ int file_exists(const char *path) {
 }
 
 
-// gets short name program was called with
-const char *get_name(const char *path) {
-	int slash_pos = strlen(path) - 1;
-
-	for (; slash_pos >= 0 && path[slash_pos] != '/'; slash_pos--);
-
-	return path + slash_pos + 1;
-}
-
-
 // gets value from file
 uint32_t get_value(const char *path) {
 	FILE *f;
@@ -68,36 +58,11 @@ void append_field(char *dest, const char *src) {
 }
 
 
-void store_temp_data(uint64_t time, uint32_t charge,
-			uint64_t s0_res) {
-	FILE *temp_file;
-	temp_file = fopen(TEMP_FILE, "a");
-	fprintf(temp_file, "%lu %u %lu", time, charge, s0_res);
-	fclose(temp_file);
-}
-
-
-void retrieve_temp_data(uint64_t *time, uint32_t *charge,
-			uint64_t *s0_res) {
-	FILE *temp_file;
-	temp_file = fopen(TEMP_FILE, "r");
-	fscanf(temp_file, "%lu %u %lu", time, charge, s0_res);
-	fclose(temp_file);
-	remove(TEMP_FILE);
-}
-
-
-void write_buffer(char *buffer) {
-	FILE *log_file_f = fopen(LOG_FILE, "a");
-	fprintf(log_file_f, "%s", buffer);
-	fclose(log_file_f);
-}
-
-
 void before_suspend(void) {
 	time_t unix_time_before;
 	uint32_t charge_before;
 	uint64_t s0_res_before;
+	FILE *temp_file_f;
 
 	unix_time_before = time(NULL);
 
@@ -109,11 +74,14 @@ void before_suspend(void) {
 	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
 		s0_res_before = get_value("/sys/kernel/debug/pmc_core/slp_s0_residency_usec");
 
-	store_temp_data(unix_time_before, charge_before, s0_res_before);
+	temp_file_f = fopen(TEMP_FILE, "a");
+	fprintf(temp_file_f, "%lu %u %lu", unix_time_before, charge_before, s0_res_before);
+	fclose(temp_file_f);
 }
 
 
 void after_suspend(void) {
+	FILE *temp_file_f, *log_file_f;
 	char *buffer;
 	uint32_t charge_before, charge_after, charge_full, charge_full_design;
 	uint32_t voltage;
@@ -128,7 +96,12 @@ void after_suspend(void) {
 	memset(buffer, 0, 200);
 
 
-	// Get all values needed, first from sysfs and then from temporary file
+	// Get all values needed, first from temporary file and then from sysfs
+	temp_file_f = fopen(TEMP_FILE, "r");
+	fscanf(temp_file_f, "%lu %u %lu", &unix_time_before, &charge_before, &s0_res_before);
+	fclose(temp_file_f);
+	remove(TEMP_FILE);
+	
 	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
 		// charge_now is expressed in µAh
 		charge_after = get_value("/sys/class/power_supply/BAT0/charge_now");
@@ -147,8 +120,6 @@ void after_suspend(void) {
 
 	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
 		s0_res_after = get_value("/sys/kernel/debug/pmc_core/slp_s0_residency_usec");
-
-	retrieve_temp_data(&unix_time_before, &charge_before, &s0_res_before);
 
 
 	// Calculate time difference
@@ -230,12 +201,13 @@ void after_suspend(void) {
 	append_field(buffer, s0_res_perc_str);
 #endif
 
-
 	strcat(buffer, "\n");
 
 
 	// Write contents of buffer to log file
-	write_buffer(buffer);
+	log_file_f = fopen(LOG_FILE, "a");
+	fprintf(log_file_f, "%s", buffer);
+	fclose(log_file_f);
 
 
 	// Set appropriate mode for log file
@@ -244,9 +216,14 @@ void after_suspend(void) {
 
 
 int main(int argc, char **argv) {
-	if (strcmp(get_name(argv[0]), "measure_start") == 0)
+	char *name = argv[0] + strlen(argv[0]) - 1;
+
+	// get short name program was called with
+	for (; name > argv[0] && *(name - 1) != '/'; name--);
+
+	if (strcmp(name, "measure_start") == 0)
 		before_suspend();
-	else if (strcmp(get_name(argv[0]), "measure_end") == 0)
+	else if (strcmp(name, "measure_end") == 0)
 		after_suspend();
 
 	return 0;
