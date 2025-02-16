@@ -163,12 +163,14 @@ void after_suspend(void) {
 	// - constants like 1e6 are interpreted as floats, but whole numbers like 100 are not
 	// - a cast is applied to the term right after it (terms inside parentheses are seen
 	// 		as one term)
-	// - when required, make sure to apply the cast to the first term of the expression;
-	// 		a cast on the last term is not going to help if the first two terms (which
-	// 		are integers) already produce a 0
+	// - when required, make sure to apply the cast to the first or second term of the
+	//		expression; a cast on the last term is not going to help if the first two
+	//		terms (which are integers) already produce a 0
 
 #if PERC_DIFF || PERC_PER_HOUR
-	float perc_diff = (float) (charge_after - charge_before) / charge_full * 100;
+	// charge_before and charge_after are unsigned; cast their difference to a signed
+	// int to enable negative percentages
+	float perc_diff = (float) (int) (charge_after - charge_before) / charge_full * 100;
 #endif
 
 #if PERC_DIFF
@@ -186,7 +188,7 @@ void after_suspend(void) {
 
 #if ENERGY_CONSUMED || POWER_DRAW
 	// Energy in joule
-	float energy_consumed = (float) (charge_after - charge_before)
+	float energy_consumed = (float) (int) (charge_after - charge_before)
 		/ charge_full_design * capacity_joule;
 #endif
 
