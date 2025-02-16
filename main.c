@@ -6,7 +6,6 @@
 
 #define LOG_FILE "/var/log/battery"
 #define TEMP_FILE "/tmp/pre_suspend_data"
-#define CAPACITY_JOULE 37 * 3600 // 37 Wh
 
 // options: 1 means enabled, 0 disabled
 #define TIME_BEFORE			1
@@ -117,6 +116,8 @@ void before_suspend(void) {
 void after_suspend(void) {
 	char *buffer;
 	unsigned int charge_before, charge_after, charge_full, charge_full_design;
+	unsigned int voltage;
+	float capacity_joule;
 	long unsigned int s0_res_before, s0_res_after;
 	time_t unix_time_before, unix_time_after, unix_time_diff;
 	unsigned int time_diff_h, time_diff_m, time_diff_s;
@@ -129,13 +130,19 @@ void after_suspend(void) {
 
 	// Get all values needed, first from sysfs and then from temporary file
 	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
+		// charge_now is expressed in µAh
 		charge_after = get_value("/sys/class/power_supply/BAT0/charge_now");
 		charge_full = get_value("/sys/class/power_supply/BAT0/charge_full");
 		charge_full_design = get_value("/sys/class/power_supply/BAT0/charge_full_design");
+		// P = I * V
+		voltage = get_value("/sys/class/power_supply/BAT0/voltage_min_design");
+		capacity_joule = (float) charge_full_design * voltage / 1e12 * 3600;
 	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
+		// energy_now is expressed in µWh
 		charge_after = get_value("/sys/class/power_supply/BAT0/energy_now");
 		charge_full = get_value("/sys/class/power_supply/BAT0/energy_full");
 		charge_full_design = get_value("/sys/class/power_supply/BAT0/energy_full_design");
+		capacity_joule = (float) charge_full_design / 1e6 * 3600;
 	}
 
 	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
@@ -198,7 +205,7 @@ void after_suspend(void) {
 #if ENERGY_CONSUMED || POWER_DRAW
 	// Energy in joule
 	float energy_consumed = (float) (int) (charge_after - charge_before)
-		/ charge_full_design * CAPACITY_JOULE;
+		/ charge_full_design * capacity_joule;
 #endif
 
 #if ENERGY_CONSUMED
