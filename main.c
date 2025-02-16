@@ -101,7 +101,7 @@ void after_suspend(void) {
 	fscanf(temp_file_f, "%lu %u %lu", &unix_time_before, &charge_before, &s0_res_before);
 	fclose(temp_file_f);
 	remove(TEMP_FILE);
-	
+
 	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
 		// charge_now is expressed in µAh
 		charge_after = get_value("/sys/class/power_supply/BAT0/charge_now");
@@ -109,13 +109,13 @@ void after_suspend(void) {
 		charge_full_design = get_value("/sys/class/power_supply/BAT0/charge_full_design");
 		// P = I * V
 		voltage = get_value("/sys/class/power_supply/BAT0/voltage_min_design");
-		capacity_joule = (float) charge_full_design * voltage / 1e12 * 3600;
+		capacity_joule = charge_full_design * voltage / 1e12 * 3600;
 	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
 		// energy_now is expressed in µWh
 		charge_after = get_value("/sys/class/power_supply/BAT0/energy_now");
 		charge_full = get_value("/sys/class/power_supply/BAT0/energy_full");
 		charge_full_design = get_value("/sys/class/power_supply/BAT0/energy_full_design");
-		capacity_joule = (float) charge_full_design / 1e6 * 3600;
+		capacity_joule = charge_full_design / 1e6 * 3600;
 	}
 
 	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
@@ -156,8 +156,19 @@ void after_suspend(void) {
 	append_field(buffer, time_diff_str);
 #endif
 
+	// Note on casts inside calculations:
+	// - an operation on two ints always returns an int, even when assigned to a float:
+	// 		float f = 1 / 2; // f = 0.000000
+	// - an operation on an int and a float returns a float
+	// - constants like 1e6 are interpreted as floats, but whole numbers like 100 are not
+	// - a cast is applied to the term right after it (terms inside parentheses are seen
+	// 		as one term)
+	// - when required, make sure to apply the cast to the first term of the expression;
+	// 		a cast on the last term is not going to help if the first two terms (which
+	// 		are integers) already produce a 0
+
 #if PERC_DIFF || PERC_PER_HOUR
-	float perc_diff = (float) (int) (charge_after - charge_before) / charge_full * 100;
+	float perc_diff = (float) (charge_after - charge_before) / charge_full * 100;
 #endif
 
 #if PERC_DIFF
@@ -175,7 +186,7 @@ void after_suspend(void) {
 
 #if ENERGY_CONSUMED || POWER_DRAW
 	// Energy in joule
-	float energy_consumed = (float) (int) (charge_after - charge_before)
+	float energy_consumed = (float) (charge_after - charge_before)
 		/ charge_full_design * capacity_joule;
 #endif
 
@@ -187,7 +198,7 @@ void after_suspend(void) {
 
 #if POWER_DRAW
 	// Power draw in watts
-	float power_draw = (float) energy_consumed / unix_time_diff;
+	float power_draw = energy_consumed / unix_time_diff;
 	char power_draw_str[20];
 	sprintf(power_draw_str, "%+7.3fW", power_draw);
 	append_field(buffer, power_draw_str);
@@ -195,7 +206,7 @@ void after_suspend(void) {
 
 #if S0_RES_PERC
 	// S0 residency, as a percentage of total sleep time
-	float s0_res_perc = (float) (s0_res_after - s0_res_before) / 1e4 / unix_time_diff;
+	float s0_res_perc = (s0_res_after - s0_res_before) / 1e4 / unix_time_diff;
 	char s0_res_perc_str[20];
 	sprintf(s0_res_perc_str, "%5.1f%%", s0_res_perc);
 	append_field(buffer, s0_res_perc_str);
