@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
@@ -31,19 +32,18 @@ int file_exists(const char *path) {
 
 // gets short name program was called with
 const char *get_name(const char *path) {
-	int slash_pos;
+	int slash_pos = strlen(path) - 1;
 
-	for (slash_pos = strlen(path) - 1; slash_pos >= 0 && path[slash_pos] != '/';
-			slash_pos--);
+	for (; slash_pos >= 0 && path[slash_pos] != '/'; slash_pos--);
 
 	return path + slash_pos + 1;
 }
 
 
 // gets value from file
-unsigned int get_value(const char *path) {
+uint32_t get_value(const char *path) {
 	FILE *f;
-	unsigned int value;
+	uint32_t value;
 
 	f = fopen(path, "r");
 	fscanf(f, "%d", &value);
@@ -68,8 +68,8 @@ void append_field(char *dest, const char *src) {
 }
 
 
-void store_temp_data(long unsigned int time, unsigned int charge,
-			long unsigned int s0_res) {
+void store_temp_data(uint64_t time, uint32_t charge,
+			uint64_t s0_res) {
 	FILE *temp_file;
 	temp_file = fopen(TEMP_FILE, "a");
 	fprintf(temp_file, "%lu %u %lu", time, charge, s0_res);
@@ -77,8 +77,8 @@ void store_temp_data(long unsigned int time, unsigned int charge,
 }
 
 
-void retrieve_temp_data(long unsigned int *time, unsigned int *charge,
-			long unsigned int *s0_res) {
+void retrieve_temp_data(uint64_t *time, uint32_t *charge,
+			uint64_t *s0_res) {
 	FILE *temp_file;
 	temp_file = fopen(TEMP_FILE, "r");
 	fscanf(temp_file, "%lu %u %lu", time, charge, s0_res);
@@ -96,8 +96,8 @@ void write_buffer(char *buffer) {
 
 void before_suspend(void) {
 	time_t unix_time_before;
-	unsigned int charge_before;
-	long unsigned int s0_res_before;
+	uint32_t charge_before;
+	uint64_t s0_res_before;
 
 	unix_time_before = time(NULL);
 
@@ -115,12 +115,12 @@ void before_suspend(void) {
 
 void after_suspend(void) {
 	char *buffer;
-	unsigned int charge_before, charge_after, charge_full, charge_full_design;
-	unsigned int voltage;
+	uint32_t charge_before, charge_after, charge_full, charge_full_design;
+	uint32_t voltage;
 	float capacity_joule;
-	long unsigned int s0_res_before, s0_res_after;
+	uint64_t s0_res_before, s0_res_after;
 	time_t unix_time_before, unix_time_after, unix_time_diff;
-	unsigned int time_diff_h, time_diff_m, time_diff_s;
+	uint32_t time_diff_h, time_diff_m, time_diff_s;
 
 
 	// Create buffer
