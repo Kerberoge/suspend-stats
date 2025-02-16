@@ -31,12 +31,12 @@ int file_exists(const char *path) {
 
 
 // gets value from file
-uint32_t get_value(const char *path) {
+uint64_t get_value(const char *path) {
 	FILE *f;
-	uint32_t value;
+	uint64_t value;
 
 	f = fopen(path, "r");
-	fscanf(f, "%d", &value);
+	fscanf(f, "%lu", &value);
 	fclose(f);
 
 	return value;
