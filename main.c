@@ -109,7 +109,7 @@ void after_suspend(void) {
 		charge_full_design = get_value("/sys/class/power_supply/BAT0/charge_full_design");
 		// P = I * V
 		voltage = get_value("/sys/class/power_supply/BAT0/voltage_min_design");
-		capacity_joule = charge_full_design * voltage / 1e12 * 3600;
+		capacity_joule = (uint64_t) charge_full_design * voltage / 1e12 * 3600;
 	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
 		// energy_now is expressed in µWh
 		charge_after = get_value("/sys/class/power_supply/BAT0/energy_now");
