@@ -60,22 +60,22 @@ void append_field(char *dest, const char *src) {
 
 void before_suspend(void) {
 	time_t unix_time_before;
-	uint32_t charge_before;
+	float energy_before;
 	uint64_t s0_res_before;
 	FILE *temp_file_f;
 
 	unix_time_before = time(NULL);
 
 	if (file_exists("/sys/class/power_supply/BAT0/charge_now"))
-		charge_before = get_value("/sys/class/power_supply/BAT0/charge_now");
+		energy_before = get_value("/sys/class/power_supply/BAT0/charge_now");
 	else if (file_exists("/sys/class/power_supply/BAT0/energy_now"))
-		charge_before = get_value("/sys/class/power_supply/BAT0/energy_now");
+		energy_before = get_value("/sys/class/power_supply/BAT0/energy_now");
 	// Get S0 residency (how much time is spent in any S0ix sleep state)
 	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
 		s0_res_before = get_value("/sys/kernel/debug/pmc_core/slp_s0_residency_usec");
 
 	temp_file_f = fopen(TEMP_FILE, "a");
-	fprintf(temp_file_f, "%lu %u %lu", unix_time_before, charge_before, s0_res_before);
+	fprintf(temp_file_f, "%lu %.0f %lu", unix_time_before, energy_before, s0_res_before);
 	fclose(temp_file_f);
 }
 
@@ -83,9 +83,8 @@ void before_suspend(void) {
 void after_suspend(void) {
 	FILE *temp_file_f, *log_file_f;
 	char *buffer;
-	uint32_t charge_before, charge_after, charge_full, charge_full_design;
+	float energy_before, energy_after, energy_full;
 	uint32_t voltage;
-	float capacity_joule;
 	uint64_t s0_res_before, s0_res_after;
 	time_t unix_time_before, unix_time_after, unix_time_diff;
 	uint32_t time_diff_h, time_diff_m, time_diff_s;
@@ -98,24 +97,26 @@ void after_suspend(void) {
 
 	// Get all values needed, first from temporary file and then from sysfs
 	temp_file_f = fopen(TEMP_FILE, "r");
-	fscanf(temp_file_f, "%lu %u %lu", &unix_time_before, &charge_before, &s0_res_before);
+	fscanf(temp_file_f, "%lu %f %lu", &unix_time_before, &energy_before, &s0_res_before);
 	fclose(temp_file_f);
 	remove(TEMP_FILE);
 
 	if (file_exists("/sys/class/power_supply/BAT0/charge_now")) {
 		// charge_now is expressed in µAh
-		charge_after = get_value("/sys/class/power_supply/BAT0/charge_now");
-		charge_full = get_value("/sys/class/power_supply/BAT0/charge_full");
-		charge_full_design = get_value("/sys/class/power_supply/BAT0/charge_full_design");
-		// P = I * V
+		energy_after = get_value("/sys/class/power_supply/BAT0/charge_now");
+		energy_full = get_value("/sys/class/power_supply/BAT0/charge_full");
+		// P = I * V (P in Wh, multiply by 3600 to obtain joule)
 		voltage = get_value("/sys/class/power_supply/BAT0/voltage_min_design");
-		capacity_joule = (uint64_t) charge_full_design * voltage / 1e12 * 3600;
+		energy_before *= voltage * 1e-12 * 3600;
+		energy_after *= voltage * 1e-12 * 3600;
+		energy_full *= voltage * 1e-12 * 3600;
 	} else if (file_exists("/sys/class/power_supply/BAT0/energy_now")) {
 		// energy_now is expressed in µWh
-		charge_after = get_value("/sys/class/power_supply/BAT0/energy_now");
-		charge_full = get_value("/sys/class/power_supply/BAT0/energy_full");
-		charge_full_design = get_value("/sys/class/power_supply/BAT0/energy_full_design");
-		capacity_joule = charge_full_design / 1e6 * 3600;
+		energy_after = get_value("/sys/class/power_supply/BAT0/energy_now");
+		energy_full = get_value("/sys/class/power_supply/BAT0/energy_full");
+		energy_before *= 1e-6 * 3600;
+		energy_after *= 1e-6 * 3600;
+		energy_full *= 1e-6 * 3600;
 	}
 
 	if (file_exists("/sys/kernel/debug/pmc_core/slp_s0_residency_usec"))
@@ -168,9 +169,7 @@ void after_suspend(void) {
 	//		terms (which are integers) already produce a 0
 
 #if PERC_DIFF || PERC_PER_HOUR
-	// charge_before and charge_after are unsigned; cast their difference to a signed
-	// int to enable negative percentages
-	float perc_diff = (float) (int) (charge_after - charge_before) / charge_full * 100;
+	float perc_diff = (energy_after - energy_before) / energy_full * 100;
 #endif
 
 #if PERC_DIFF
@@ -188,8 +187,7 @@ void after_suspend(void) {
 
 #if ENERGY_CONSUMED || POWER_DRAW
 	// Energy in joule
-	float energy_consumed = (float) (int) (charge_after - charge_before)
-		/ charge_full_design * capacity_joule;
+	float energy_consumed = energy_after - energy_before;
 #endif
 
 #if ENERGY_CONSUMED
