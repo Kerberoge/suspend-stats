@@ -206,8 +206,15 @@ void after_suspend(void) {
 
 #if S0_RES_PERC
 	// S0 residency, as a percentage of total sleep time
-	float s0_res_perc = (s0_res_after - s0_res_before) / 1e4 / unix_time_diff;
+	float s0_res_perc = 0;
 	char s0_res_perc_str[20];
+
+	// If the S0 residency counter is lower after sleep than it was before, then the
+	// counter must have been reset during sleep. This happens during hibernation,
+	// during which no S0 sleep can occur (and so the percentage must be zero)
+	if (s0_res_after >= s0_res_before)
+		s0_res_perc = (s0_res_after - s0_res_before) / 1e4 / unix_time_diff;
+
 	sprintf(s0_res_perc_str, "%5.1f%%", s0_res_perc);
 	append_field(buffer, s0_res_perc_str);
 #endif
