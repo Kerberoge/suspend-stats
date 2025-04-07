@@ -5,7 +5,7 @@
 #include <time.h>
 #include <sys/stat.h>
 
-#define LOG_FILE "/var/log/battery"
+#define LOG_FILE "/var/log/suspend"
 #define TEMP_FILE "/tmp/pre_suspend_data"
 
 // options: 1 means enabled, 0 disabled
